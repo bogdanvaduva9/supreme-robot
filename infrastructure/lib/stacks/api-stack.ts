@@ -3,6 +3,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 
 interface AtlasApiStackProps extends cdk.StackProps {
@@ -39,6 +40,18 @@ export class AtlasApiStack extends cdk.Stack {
     const listJudeteFn  = makeFn('ListJudeteFn',  'api_list_judete');
 
     // ── API Gateway ─────────────────────────────────────────────────────────────
+
+    // Account-level CloudWatch Logs role for API Gateway (required once per account/region)
+    const cloudWatchRole = new iam.Role(this, 'ApiGatewayCloudWatchRole', {
+      assumedBy: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonAPIGatewayPushToCloudWatchLogs'),
+      ],
+    });
+    const cfnAccount = new apigateway.CfnAccount(this, 'ApiGatewayAccount', {
+      cloudWatchRoleArn: cloudWatchRole.roleArn,
+    });
+
     const accessLogGroup = new logs.LogGroup(this, 'ApiAccessLogs', {
       logGroupName: '/atlas/prod/apigateway/access',
       retention: logs.RetentionDays.ONE_MONTH,
@@ -63,6 +76,9 @@ export class AtlasApiStack extends cdk.Stack {
         allowHeaders: ['Content-Type'],
       },
     });
+
+    // Ensure the account CloudWatch role is set before the stage is created
+    api.node.addDependency(cfnAccount);
 
     const localities = api.root.addResource('localities');
     localities.addMethod('GET', new apigateway.LambdaIntegration(listByJudetFn));
