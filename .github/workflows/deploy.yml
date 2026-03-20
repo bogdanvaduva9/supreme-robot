@@ -1,0 +1,103 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: eu-central-1
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Toolchain setup ───────────────────────────────────────────────────────
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: infrastructure/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ── Build Lambda zips ─────────────────────────────────────────────────────
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync
+
+      - name: Build Lambda packages
+        run: make build
+
+      # ── Build Next.js frontend ────────────────────────────────────────────────
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+
+      # ── CDK deploy ────────────────────────────────────────────────────────────
+      - name: Install CDK dependencies
+        working-directory: infrastructure
+        run: npm ci
+
+      - name: CDK deploy
+        working-directory: infrastructure
+        run: npx cdk deploy --all --require-approval never --outputs-file ../cdk-outputs.json
+        env:
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+          CDK_DEFAULT_REGION: ${{ env.AWS_REGION }}
+
+      # ── Sync frontend to S3 ───────────────────────────────────────────────────
+      - name: Read CDK outputs
+        id: cdk
+        run: |
+          BUCKET=$(jq -r '.AtlasFrontendStack.BucketName' cdk-outputs.json)
+          DIST_ID=$(jq -r '.AtlasFrontendStack.DistributionId' cdk-outputs.json)
+          echo "bucket=$BUCKET" >> "$GITHUB_OUTPUT"
+          echo "distribution_id=$DIST_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Sync immutable assets (_next/)
+        run: |
+          aws s3 sync frontend/out/_next/ s3://${{ steps.cdk.outputs.bucket }}/_next/ \
+            --cache-control "max-age=31536000, immutable" \
+            --delete
+
+      - name: Sync remaining assets
+        run: |
+          aws s3 sync frontend/out/ s3://${{ steps.cdk.outputs.bucket }}/ \
+            --exclude "_next/*" \
+            --cache-control "max-age=0, must-revalidate" \
+            --delete
+
+      # ── Invalidate CloudFront cache ───────────────────────────────────────────
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.cdk.outputs.distribution_id }} \
+            --paths "/*"

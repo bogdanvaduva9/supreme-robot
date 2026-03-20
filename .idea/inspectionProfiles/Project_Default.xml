@@ -1,0 +1,39 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="Eslint" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="aws-lambda-powertools" />
+          <option value="boto3" />
+          <option value="botocore" />
+          <option value="AWSIoTPythonSDK" />
+          <option value="aws-requests-auth" />
+          <option value="requests" />
+          <option value="behave" />
+          <option value="webdriver-manager" />
+          <option value="selenium" />
+          <option value="pytz" />
+          <option value="paho-mqtt" />
+          <option value="rsa" />
+          <option value="python-dateutil" />
+          <option value="python-jose" />
+          <option value="pycryptodome" />
+          <option value="pytest" />
+          <option value="pytest-playwright" />
+          <option value="pytest-xdist" />
+          <option value="onera-common-library" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyUnresolvedReferencesInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredIdentifiers">
+        <list>
+          <option value="scripts.generate_small_files_from_edf.awsglue" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="TsLint" enabled="true" level="WARNING" enabled_by_default="true" />
+  </profile>
+</component>

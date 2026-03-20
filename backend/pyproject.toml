@@ -1,0 +1,35 @@
+[project]
+name = "atlas-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "pynamodb>=5.5",
+    "aws-lambda-powertools[all]>=2.40",
+    "requests>=2.31",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "moto[dynamodb]>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "types-requests>=2.31",
+    "pynamodb-mypy>=0.1",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+plugins = ["pynamodb.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
