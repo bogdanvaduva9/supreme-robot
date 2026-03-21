@@ -12,6 +12,8 @@ export default function LocalityCard({ locality, onClick, isSelected }: Props) {
   const { identity, demographics, meta } = locality
   const score = meta?.completeness_score ?? 0
 
+  if (!identity?.name) return null
+
   return (
     <button
       onClick={onClick}
