@@ -54,7 +54,7 @@ export class AtlasPipelineStack extends cdk.Stack {
     const importAncomFn    = makePipelineFn('ImportAncomFn',      'pipeline_import_ancom');
 
     // ── Step Functions state machine ─────────────────────────────────────────
-    // Retry config: back off on Lambda throttles (429) and transient errors
+    // Retry config: back off on Lambda throttles and transient errors
     const throttleRetry: sfn.RetryProps = {
       errors: ['Lambda.TooManyRequestsException', 'Lambda.ServiceException', 'Lambda.AWSLambdaException'],
       interval: cdk.Duration.seconds(2),
@@ -67,36 +67,20 @@ export class AtlasPipelineStack extends cdk.Stack {
       outputPath: '$.Payload',
     }).addRetry(throttleRetry);
 
-    const parallelImport = new sfn.Parallel(this, 'ImportLocalityData')
-      .branch(
-        new sfnTasks.LambdaInvoke(this, 'ImportINSData', {
-          lambdaFunction: importInsFn,
-          outputPath: '$.Payload',
-        }).addRetry(throttleRetry)
-      )
-      .branch(
-        new sfnTasks.LambdaInvoke(this, 'ImportOSMData', {
-          lambdaFunction: importOsmFn,
-          outputPath: '$.Payload',
-        }).addRetry(throttleRetry)
-      )
-      .branch(
-        new sfnTasks.LambdaInvoke(this, 'ImportWikidata', {
-          lambdaFunction: importWikidataFn,
-          outputPath: '$.Payload',
-        }).addRetry(throttleRetry)
-      )
-      .branch(
-        new sfnTasks.LambdaInvoke(this, 'ImportANCOM', {
-          lambdaFunction: importAncomFn,
-          outputPath: '$.Payload',
-        }).addRetry(throttleRetry)
-      );
+    // POC: single Lambda per locality to stay well within the 25k event limit.
+    // (1039 localities × ~7 events each ≈ 7,300 total events)
+    // The Parallel state (4 Lambdas per locality) will be re-introduced in
+    // Phase 2 once INS/OSM/ANCOM importers are fully implemented and we
+    // switch to Express Workflows (no event limit).
+    const importLocality = new sfnTasks.LambdaInvoke(this, 'ImportWikidata', {
+      lambdaFunction: importWikidataFn,
+      outputPath: '$.Payload',
+    }).addRetry(throttleRetry);
 
     const forEachLocality = new sfn.Map(this, 'ForEachLocality', {
       itemsPath: sfn.JsonPath.stringAt('$.localities'),
-      maxConcurrency: 5,   // 5 iterations × 4 Lambdas = 20 concurrent max
-    }).itemProcessor(parallelImport);
+      maxConcurrency: 10,
+    }).itemProcessor(importLocality);
 
     const smLogGroup = new logs.LogGroup(this, 'StateMachineLogs', {
       logGroupName: '/atlas/prod/stepfunctions/locality-importer',
