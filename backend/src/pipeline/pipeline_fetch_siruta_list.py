@@ -33,15 +33,19 @@ _MARAMURES_QID = "Q183476"
 
 # Map Wikidata type Q-IDs → LocalityType enum values (stored as plain strings)
 _TYPE_MAP: dict[str, str] = {
-    "Q640364": "comuna",    # comună în România
+    "Q640364": "comuna",     # comună în România
     "Q1775818": "municipiu", # municipiu în România
-    "Q1780490": "oras",     # oraș în România
-    "Q11341482": "sat",     # sat în România
-    "Q640026": "sat",       # sat în România (alternate)
-    "Q515": "municipiu",    # city
+    "Q1780490": "oras",      # oraș în România
+    "Q11341482": "sat",      # sat în România
+    "Q640026": "sat",        # sat în România (alternate)
+    "Q2074737": "sat",       # rural locality in Romania
+    "Q515": "municipiu",     # city
     "Q1549591": "municipiu", # big city
-    "Q3957": "oras",        # town
-    "Q486972": "sat",       # human settlement (fallback)
+    "Q3957": "oras",         # town
+    "Q532": "sat",           # village (generic — very common in Wikidata)
+    "Q208511": "sat",        # village (alternate)
+    "Q486972": "sat",        # human settlement (fallback)
+    "Q3024240": "sat",       # locality
 }
 
 _SPARQL_QUERY = f"""
@@ -52,12 +56,7 @@ SELECT DISTINCT ?item ?itemLabel ?siruta ?lat ?lng ?type ?population WHERE {{
     ?item wdt:P131 ?parent.
     ?parent wdt:P131 wd:{_MARAMURES_QID}.
   }}
-  ?item wdt:P31 ?type.
-  FILTER(?type IN (
-    wd:Q640364, wd:Q1775818, wd:Q1780490,
-    wd:Q11341482, wd:Q640026, wd:Q515,
-    wd:Q1549591, wd:Q3957, wd:Q486972
-  ))
+  OPTIONAL {{ ?item wdt:P31 ?type. }}
   OPTIONAL {{ ?item wdt:P843 ?siruta. }}
   OPTIONAL {{
     ?item wdt:P625 ?coords.
