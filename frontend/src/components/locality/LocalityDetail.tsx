@@ -95,11 +95,13 @@ export default function LocalityDetail({ locality, onClose }: Props) {
                 </div>
               </div>
             )}
-            <div className="flex gap-3 mt-2">
-              <UtilityDot label="Gaz" active={infrastructure.utilities.gas} />
-              <UtilityDot label="Apă" active={infrastructure.utilities.water} />
-              <UtilityDot label="Canalizare" active={infrastructure.utilities.sewage} />
-            </div>
+            {infrastructure.utilities && (
+              <div className="flex gap-3 mt-2">
+                <UtilityDot label="Gaz" active={infrastructure.utilities.gas} />
+                <UtilityDot label="Apă" active={infrastructure.utilities.water} />
+                <UtilityDot label="Canalizare" active={infrastructure.utilities.sewage} />
+              </div>
+            )}
           </Section>
         )}
 

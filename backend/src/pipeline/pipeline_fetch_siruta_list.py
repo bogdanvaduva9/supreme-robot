@@ -56,7 +56,14 @@ SELECT DISTINCT ?item ?itemLabel ?siruta ?lat ?lng ?type ?population WHERE {{
     ?item wdt:P131 ?parent.
     ?parent wdt:P131 wd:{_MARAMURES_QID}.
   }}
-  OPTIONAL {{ ?item wdt:P31 ?type. }}
+  ?item wdt:P31 ?type.
+  FILTER(?type IN (
+    wd:Q640364,  wd:Q1775818, wd:Q1780490,
+    wd:Q11341482, wd:Q640026, wd:Q2074737,
+    wd:Q515,     wd:Q1549591, wd:Q3957,
+    wd:Q532,     wd:Q208511,  wd:Q486972,
+    wd:Q3024240
+  ))
   OPTIONAL {{ ?item wdt:P843 ?siruta. }}
   OPTIONAL {{
     ?item wdt:P625 ?coords.
