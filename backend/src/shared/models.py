@@ -240,9 +240,7 @@ class LocalityMetaAttribute(MapAttribute):
 class JudetCompletenessIndex(GlobalSecondaryIndex):
     class Meta:
         index_name = "judet-completeness-index"
-        projection = IncludeProjection(
-            non_key_attributes=["identity", "demographics", "meta"]
-        )
+        projection = IncludeProjection(["identity", "demographics", "meta"])
 
     JudetCode = UnicodeAttribute(hash_key=True)
     CompletenessScore = UnicodeAttribute(range_key=True)
