@@ -54,40 +54,48 @@ export class AtlasPipelineStack extends cdk.Stack {
     const importAncomFn    = makePipelineFn('ImportAncomFn',      'pipeline_import_ancom');
 
     // ── Step Functions state machine ─────────────────────────────────────────
+    // Retry config: back off on Lambda throttles (429) and transient errors
+    const throttleRetry: sfn.RetryProps = {
+      errors: ['Lambda.TooManyRequestsException', 'Lambda.ServiceException', 'Lambda.AWSLambdaException'],
+      interval: cdk.Duration.seconds(2),
+      maxAttempts: 4,
+      backoffRate: 2,
+    };
+
     const fetchSiruta = new sfnTasks.LambdaInvoke(this, 'FetchSirutaList', {
       lambdaFunction: fetchSirutaFn,
       outputPath: '$.Payload',
-    });
+    }).addRetry(throttleRetry);
 
     const parallelImport = new sfn.Parallel(this, 'ImportLocalityData')
       .branch(
         new sfnTasks.LambdaInvoke(this, 'ImportINSData', {
           lambdaFunction: importInsFn,
           outputPath: '$.Payload',
-        })
+        }).addRetry(throttleRetry)
       )
       .branch(
         new sfnTasks.LambdaInvoke(this, 'ImportOSMData', {
           lambdaFunction: importOsmFn,
           outputPath: '$.Payload',
-        })
+        }).addRetry(throttleRetry)
       )
       .branch(
         new sfnTasks.LambdaInvoke(this, 'ImportWikidata', {
           lambdaFunction: importWikidataFn,
           outputPath: '$.Payload',
-        })
+        }).addRetry(throttleRetry)
       )
       .branch(
         new sfnTasks.LambdaInvoke(this, 'ImportANCOM', {
           lambdaFunction: importAncomFn,
           outputPath: '$.Payload',
-        })
+        }).addRetry(throttleRetry)
       );
 
     const forEachLocality = new sfn.Map(this, 'ForEachLocality', {
       itemsPath: sfn.JsonPath.stringAt('$.localities'),
-      maxConcurrency: 10,
+      maxConcurrency: 5,   // 5 iterations × 4 Lambdas = 20 concurrent max
     }).itemProcessor(parallelImport);
 
     const smLogGroup = new logs.LogGroup(this, 'StateMachineLogs', {
