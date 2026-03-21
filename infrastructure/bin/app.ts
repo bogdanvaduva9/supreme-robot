@@ -39,6 +39,7 @@ const storageStack = new AtlasStorageStack(app, 'AtlasStorageStack', {
 const apiStack = new AtlasApiStack(app, 'AtlasApiStack', {
   env: { account: ACCOUNT, region: 'eu-central-1' },
   table: storageStack.table,
+  domainName: DOMAIN,
   crossRegionReferences: true,
 });
 apiStack.addDependency(storageStack);

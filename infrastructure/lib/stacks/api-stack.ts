@@ -4,10 +4,14 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
+import * as route53 from 'aws-cdk-lib/aws-route53';
+import * as targets from 'aws-cdk-lib/aws-route53-targets';
 import { Construct } from 'constructs';
 
 interface AtlasApiStackProps extends cdk.StackProps {
   table: dynamodb.ITable;
+  domainName: string;
 }
 
 export class AtlasApiStack extends cdk.Stack {
@@ -89,7 +93,41 @@ export class AtlasApiStack extends cdk.Stack {
     const judete = api.root.addResource('judete');
     judete.addMethod('GET', new apigateway.LambdaIntegration(listJudeteFn));
 
-    new cdk.CfnOutput(this, 'ApiUrl', { value: api.url });
+    // ── Custom domain: api.romania-atlas.com ─────────────────────────────────────
+    const apiSubdomain = `api.${props.domainName}`;
+
+    const hostedZone = route53.HostedZone.fromLookup(this, 'HostedZone', {
+      domainName: props.domainName,
+    });
+
+    // Regional cert (must be same region as API Gateway — eu-central-1)
+    const apiCert = new acm.Certificate(this, 'ApiCertificate', {
+      domainName: apiSubdomain,
+      validation: acm.CertificateValidation.fromDns(hostedZone),
+    });
+
+    const customDomain = new apigateway.DomainName(this, 'ApiCustomDomain', {
+      domainName: apiSubdomain,
+      certificate: apiCert,
+      endpointType: apigateway.EndpointType.REGIONAL,
+      securityPolicy: apigateway.SecurityPolicy.TLS_1_2,
+    });
+
+    new apigateway.BasePathMapping(this, 'ApiBasePathMapping', {
+      domainName: customDomain,
+      restApi: api,
+      stage: api.deploymentStage,
+    });
+
+    new route53.ARecord(this, 'ApiAliasRecord', {
+      zone: hostedZone,
+      recordName: 'api',
+      target: route53.RecordTarget.fromAlias(
+        new targets.ApiGatewayDomain(customDomain),
+      ),
+    });
+
+    new cdk.CfnOutput(this, 'ApiUrl', { value: `https://${apiSubdomain}/` });
     new cdk.CfnOutput(this, 'ApiId', { value: api.restApiId });
   }
 }
