@@ -131,7 +131,7 @@ class InfrastructureAttribute(MapAttribute):
     public_transport = UnicodeAttribute(default="")
     distance_to_city = DistanceToCityAttribute(null=True)
     mobile_coverage = ListAttribute(of=MobileCoverageAttribute)
-    utilities = UtilitiesAttribute()
+    utilities = UtilitiesAttribute(null=True)
 
 
 class NearestFacilityAttribute(MapAttribute):

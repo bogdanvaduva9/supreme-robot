@@ -21,6 +21,27 @@ os.environ.setdefault("AWS_SESSION_TOKEN", "testing")
 os.environ.setdefault("TABLE_NAME", "atlas-test-main")
 
 
+class MockLambdaContext:
+    """Minimal Lambda context stub compatible with Lambda Powertools."""
+    function_name = "atlas-test-fn"
+    function_version = "$LATEST"
+    invoked_function_arn = "arn:aws:lambda:eu-central-1:000000000000:function:atlas-test-fn"
+    memory_limit_in_mb = 256
+    aws_request_id = "test-request-id"
+    log_group_name = "/aws/lambda/atlas-test-fn"
+    log_stream_name = "2026/01/01/[$LATEST]test"
+    identity = None
+    client_context = None
+
+    def get_remaining_time_in_millis(self) -> int:
+        return 30000
+
+
+@pytest.fixture
+def mock_context() -> MockLambdaContext:
+    return MockLambdaContext()
+
+
 @pytest.fixture
 def dynamodb_table():  # type: ignore[no-untyped-def]
     """Mocked DynamoDB table — created via PynamoDB, schema matches production."""
