@@ -43,6 +43,10 @@ All stack files: `infrastructure/lib/stacks/`.
 
 CORS: all origins, GET + OPTIONS only.
 
+**Custom domain:** `api.romania-atlas.com` — regional ACM cert (eu-central-1), API Gateway custom domain with base path mapping (no base path → stage prefix dropped). Route53 A alias record created by CDK. `NEXT_PUBLIC_API_URL` = `https://api.romania-atlas.com` (no `/v1/`).
+
+**Known fix applied:** `IncludeProjection` in `backend/src/shared/models.py` takes a positional list argument, not `non_key_attributes=` keyword.
+
 ### AtlasPipelineStack — Import Pipeline
 
 5 import Lambdas, each with an SQS DLQ (14-day retention):

@@ -85,7 +85,7 @@ supreme-robot/
 
 ## API Endpoints (Phase 1)
 
-Base URL: `https://romania-atlas.com` (API Gateway URL in `NEXT_PUBLIC_API_URL` secret)
+Base URL: `https://api.romania-atlas.com` (custom domain — set as `NEXT_PUBLIC_API_URL` secret, **no `/v1/` suffix**)
 
 | Method | Path | Lambda | Description |
 |---|---|---|---|
@@ -94,6 +94,8 @@ Base URL: `https://romania-atlas.com` (API Gateway URL in `NEXT_PUBLIC_API_URL` 
 | GET | `/judete` | `api_list_judete` | List all județe with stats |
 
 All endpoints are public (read-only). Auth required in Phase 2.
+
+> Raw execute-api URL still works but `api.romania-atlas.com` is canonical. The custom domain base path mapping drops the `/v1` stage prefix — do not include it in `NEXT_PUBLIC_API_URL`.
 
 ---
 
