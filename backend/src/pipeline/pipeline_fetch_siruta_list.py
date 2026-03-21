@@ -1,15 +1,17 @@
 """
-Fetch the list of SIRUTA codes for Maramureș from Wikidata.
+Fetch localities for Maramureș from Wikidata.
 
-Queries Wikidata for all localities in Maramureș county (direct + one level
-deep) that have a P843 (SIRUTA code). Returns enriched locality data including
-coordinates and population so downstream importers only need to write to DDB.
+Queries Wikidata for all localities in Maramureș county by administrative
+hierarchy (P131). P843 (SIRUTA) is optional — Wikidata coverage is sparse.
+Where SIRUTA is absent the Wikidata Q-ID numeric part is used as a surrogate
+key so localities still appear on the map. Real SIRUTA codes are backfilled
+from INS data in a later pipeline step.
 
 Step Functions input:  { "refreshType": "full" | "partial" }
 Step Functions output: { "localities": [{ "siruta": "...", "name": "...", ... }] }
 
 Wikidata properties used:
-  P843  — SIRUTA code (Romanian locality identifier)
+  P843  — SIRUTA code (optional — sparse coverage)
   P625  — coordinates
   P1082 — population
   P31   — instance of (locality type)
@@ -50,13 +52,13 @@ SELECT DISTINCT ?item ?itemLabel ?siruta ?lat ?lng ?type ?population WHERE {{
     ?item wdt:P131 ?parent.
     ?parent wdt:P131 wd:{_MARAMURES_QID}.
   }}
-  ?item wdt:P843 ?siruta.
   ?item wdt:P31 ?type.
   FILTER(?type IN (
     wd:Q640364, wd:Q1775818, wd:Q1780490,
     wd:Q11341482, wd:Q640026, wd:Q515,
     wd:Q1549591, wd:Q3957, wd:Q486972
   ))
+  OPTIONAL {{ ?item wdt:P843 ?siruta. }}
   OPTIONAL {{
     ?item wdt:P625 ?coords.
     BIND(geof:latitude(?coords) AS ?lat)
@@ -65,7 +67,7 @@ SELECT DISTINCT ?item ?itemLabel ?siruta ?lat ?lng ?type ?population WHERE {{
   OPTIONAL {{ ?item wdt:P1082 ?population. }}
   SERVICE wikibase:label {{ bd:serviceParam wikibase:language "ro,en". }}
 }}
-ORDER BY ?siruta
+ORDER BY ?item
 """
 
 
@@ -101,14 +103,21 @@ def _fetch_from_wikidata() -> list[dict[str, Any]]:
     resp.raise_for_status()
     bindings = resp.json()["results"]["bindings"]
 
-    seen: set[str] = set()
+    # Deduplicate by Wikidata item (one row per locality)
+    seen_items: set[str] = set()
     localities: list[dict[str, Any]] = []
 
     for row in bindings:
-        siruta = row["siruta"]["value"]
-        if siruta in seen:
+        wikidata_id = row["item"]["value"].rsplit("/", 1)[-1]  # e.g. "Q193714"
+        if wikidata_id in seen_items:
             continue
-        seen.add(siruta)
+        seen_items.add(wikidata_id)
+
+        # Use SIRUTA if Wikidata has it; fall back to Q-ID numeric part
+        if "siruta" in row:
+            siruta = row["siruta"]["value"]
+        else:
+            siruta = wikidata_id.lstrip("Q")  # e.g. "193714" — surrogate key
 
         type_qid = row["type"]["value"].rsplit("/", 1)[-1]
         locality_type = _TYPE_MAP.get(type_qid, "sat")
@@ -117,14 +126,20 @@ def _fetch_from_wikidata() -> list[dict[str, Any]]:
         lng: float | None = float(row["lng"]["value"]) if "lng" in row else None
         population: int = int(float(row["population"]["value"])) if "population" in row else 0
 
+        locality_name: str = row["itemLabel"]["value"]
+        # Skip items where label is just the Q-ID (no Romanian name in Wikidata)
+        if locality_name.startswith("Q") and locality_name[1:].isdigit():
+            continue
+
         localities.append({
             "siruta": siruta,
-            "name": row["itemLabel"]["value"],
+            "name": locality_name,
             "type": locality_type,
             "lat": lat,
             "lng": lng,
             "population": population,
-            "wikidata_id": row["item"]["value"].rsplit("/", 1)[-1],
+            "wikidata_id": wikidata_id,
         })
 
+    logger.info("Parsed localities from Wikidata", extra={"total": len(localities)})
     return localities
