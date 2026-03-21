@@ -29,7 +29,7 @@ tracer = Tracer()
 
 _SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
 _JUDET_CODE = "MM"
-_MARAMURES_QID = "Q183476"
+_MARAMURES_QID = "Q188813"
 
 # Map Wikidata type Q-IDs → LocalityType enum values (stored as plain strings)
 _TYPE_MAP: dict[str, str] = {
@@ -118,7 +118,7 @@ def _fetch_from_wikidata() -> list[dict[str, Any]]:
         else:
             siruta = wikidata_id.lstrip("Q")  # e.g. "193714" — surrogate key
 
-        type_qid = row["type"]["value"].rsplit("/", 1)[-1]
+        type_qid = row["type"]["value"].rsplit("/", 1)[-1] if "type" in row else ""
         locality_type = _TYPE_MAP.get(type_qid, "sat")
 
         lat: float | None = float(row["lat"]["value"]) if "lat" in row else None
