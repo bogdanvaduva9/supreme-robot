@@ -19,13 +19,12 @@ export class AtlasStorageStack extends cdk.Stack {
     });
 
     // GSI-1: list localities in a județ ordered by completeness score
-    // ALL projection — nested attributes (identity, demographics, meta) can't
-    // be listed in nonKeyAttributes, so we project everything.
     table.addGlobalSecondaryIndex({
       indexName: 'judet-completeness-index',
       partitionKey: { name: 'JudetCode', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'CompletenessScore', type: dynamodb.AttributeType.STRING },
-      projectionType: dynamodb.ProjectionType.ALL,
+      projectionType: dynamodb.ProjectionType.INCLUDE,
+      nonKeyAttributes: ['name', 'type', 'population', 'lastUpdated'],
     });
 
     // GSI-2: most-recently-updated localities feed

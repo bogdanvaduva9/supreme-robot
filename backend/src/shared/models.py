@@ -17,7 +17,7 @@ from pynamodb.attributes import (
     UnicodeAttribute,
     UTCDateTimeAttribute,
 )
-from pynamodb.indexes import AllProjection, GlobalSecondaryIndex, KeysOnlyProjection
+from pynamodb.indexes import GlobalSecondaryIndex, KeysOnlyProjection
 from pynamodb.models import Model
 
 
@@ -240,7 +240,7 @@ class LocalityMetaAttribute(MapAttribute):
 class JudetCompletenessIndex(GlobalSecondaryIndex):
     class Meta:
         index_name = "judet-completeness-index"
-        projection = AllProjection()
+        projection = KeysOnlyProjection()
 
     JudetCode = UnicodeAttribute(hash_key=True)
     CompletenessScore = UnicodeAttribute(range_key=True)

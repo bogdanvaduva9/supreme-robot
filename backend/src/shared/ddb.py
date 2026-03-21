@@ -26,9 +26,10 @@ def list_localities_by_judet(
     limit: int = 100,
     last_key: dict[str, Any] | None = None,
 ) -> tuple[list[LocalityModel], dict[str, Any] | None]:
-    results = LocalityModel.judet_completeness_index.query(
-        judet_code,
-        scan_index_forward=False,
+    # Scan with filter — the GSI projects only keys (no full item data), so we
+    # scan the base table instead. For POC scale (~1000 items) this is instant.
+    results = LocalityModel.scan(
+        LocalityModel.JudetCode == judet_code,
         limit=limit,
         last_evaluated_key=last_key,
     )
