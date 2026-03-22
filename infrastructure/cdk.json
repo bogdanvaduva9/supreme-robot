@@ -1,0 +1,19 @@
+{
+  "app": "npx ts-node --prefer-ts-exts bin/app.ts",
+  "watch": {
+    "include": ["**"],
+    "exclude": ["README.md", "cdk*.json", "dist", "node_modules"]
+  },
+  "context": {
+    "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
+    "@aws-cdk/core:stackRelativeExports": true,
+
+    "---REQUIRED BEFORE FIRST DEPLOY---": "Fill in the two values below. Bootstrap with: cdk bootstrap aws://ACCOUNT/eu-central-1",
+    "---SSM SECRETS (eu-central-1)---": "aws ssm put-parameter --region eu-central-1 --name /lifesim/anthropic-api-key --type SecureString --value sk-ant-... && aws ssm put-parameter --region eu-central-1 --name /lifesim/alpha-access-key --type SecureString --value your-key",
+    "---ACM CERT NOTE---": "certificateArn must point to a certificate in us-east-1 (CloudFront requirement), even though everything else is in eu-central-1",
+
+    "existingOriginDomain": "REPLACE_WITH_YOUR_EXISTING_APP_ORIGIN",
+    "certificateArn": "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID",
+    "imageTag": "latest"
+  }
+}

@@ -1,0 +1,80 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+
+# Prevent concurrent deploys — queue them instead
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build → Push ECR → CDK Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── AWS credentials ──────────────────────────────────────────────────────
+      # Required GitHub secrets:
+      #   AWS_ACCESS_KEY_ID      — IAM user access key
+      #   AWS_SECRET_ACCESS_KEY  — IAM user secret
+      #   AWS_REGION             — eu-central-1
+      #   AWS_ACCOUNT_ID         — 12-digit account number
+      #
+      # Note: CloudFront is global and its ACM cert must be in us-east-1.
+      # Everything else (App Runner, ECR, SSM) runs in eu-central-1.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # ── Login to ECR ─────────────────────────────────────────────────────────
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ── Build & push Docker image ────────────────────────────────────────────
+      - name: Build and push image
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_BASE_PATH=/life-game \
+            -t $REGISTRY/lifesim:$IMAGE_TAG \
+            -t $REGISTRY/lifesim:latest \
+            .
+          docker push $REGISTRY/lifesim:$IMAGE_TAG
+          docker push $REGISTRY/lifesim:latest
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+
+      # ── Install CDK dependencies ─────────────────────────────────────────────
+      - name: Install infrastructure dependencies
+        working-directory: infrastructure
+        run: npm ci
+
+      # ── CDK deploy ───────────────────────────────────────────────────────────
+      # Passes the git SHA as imageTag so App Runner picks up the new image.
+      # CDK reads existingOriginDomain and certificateArn from cdk.json context.
+      - name: CDK deploy
+        working-directory: infrastructure
+        env:
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+          CDK_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          npx cdk deploy \
+            --require-approval never \
+            --context imageTag=${{ github.sha }}
+
+      # ── Summary ─────────────────────────────────────────────────────────────
+      - name: Deployment summary
+        run: |
+          echo "✅ Deployed image: ${{ github.sha }}"
+          echo "🌐 https://bogdan-vaduva.com/life-game"
