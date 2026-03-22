@@ -89,19 +89,25 @@ jobs:
       # GitHub secrets become SSM SecureString params in eu-central-1.
       # The CDK stack reads these from SSM and injects them into App Runner.
       - name: Sync secrets to SSM
+        # SSM String type (not SecureString) because CloudFormation's
+        # {{resolve:ssm:...}} dynamic reference only supports String/StringList.
+        # SecureString requires {{resolve:ssm-secure:...}} which App Runner's
+        # CfnService does not support. IAM policies still restrict access.
         run: |
+          # Delete first in case params exist as SecureString (type cannot be changed via --overwrite)
+          aws ssm delete-parameter --region eu-central-1 --name /lifesim/anthropic-api-key 2>/dev/null || true
+          aws ssm delete-parameter --region eu-central-1 --name /lifesim/alpha-access-key  2>/dev/null || true
+
           aws ssm put-parameter \
             --region eu-central-1 \
             --name /lifesim/anthropic-api-key \
             --value "${{ secrets.ANTHROPIC_API_KEY }}" \
-            --type SecureString \
-            --overwrite
+            --type String
           aws ssm put-parameter \
             --region eu-central-1 \
             --name /lifesim/alpha-access-key \
             --value "${{ secrets.ALPHA_ACCESS_KEY }}" \
-            --type SecureString \
-            --overwrite
+            --type String
 
       # ── Install CDK dependencies ─────────────────────────────────────────────
       - name: Install infrastructure dependencies
