@@ -1,35 +1,16 @@
 import * as cdk from 'aws-cdk-lib';
-import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
-import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import * as route53 from 'aws-cdk-lib/aws-route53';
-import * as cfTargets from 'aws-cdk-lib/aws-route53-targets';
-import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as apprunner from 'aws-cdk-lib/aws-apprunner';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
 
 export interface LifeSimStackProps extends cdk.StackProps {
-  // (env is inherited from cdk.StackProps)
   /**
    * Docker image tag to deploy (e.g. a git SHA).
    * Passed via --context imageTag=<sha> in CI.
    */
   imageTag: string;
-
-  /**
-   * Hostname of the existing app that lives at bogdan-vaduva.com root.
-   * Could be an ALB DNS name, another CloudFront domain, or an S3 website endpoint.
-   * Example: "existing-alb-123.us-east-1.elb.amazonaws.com"
-   */
-  existingOriginDomain: string;
-
-  /**
-   * ARN of an ACM certificate that covers bogdan-vaduva.com.
-   * MUST be in us-east-1 (required by CloudFront).
-   */
-  certificateArn: string;
 }
 
 export class LifeSimStack extends cdk.Stack {
@@ -37,10 +18,9 @@ export class LifeSimStack extends cdk.Stack {
     super(scope, id, props);
 
     // ── ECR Repository ──────────────────────────────────────────────────────
-    // The repo is created by the GitHub Actions workflow before the first image
-    // push (see "Ensure ECR repository exists" step in deploy.yml).
-    // We import it here by name so CDK never tries to create it — avoiding the
-    // chicken-and-egg problem where the push happens before `cdk deploy`.
+    // Created by the GitHub Actions workflow ("Ensure ECR repository exists"
+    // step) before the first image push — imported here by name so CDK never
+    // tries to create it and doesn't race with the docker push.
     const repo = ecr.Repository.fromRepositoryName(this, 'LifeSimRepo', 'lifesim');
 
     // ── IAM role: App Runner → ECR ──────────────────────────────────────────
@@ -54,10 +34,9 @@ export class LifeSimStack extends cdk.Stack {
     });
 
     // ── Secrets from SSM Parameter Store ───────────────────────────────────
-    // These are synced automatically from GitHub repository secrets by the
-    // deploy workflow (see .github/workflows/deploy.yml → "Sync secrets to SSM").
-    // Set ANTHROPIC_API_KEY and ALPHA_ACCESS_KEY in GitHub repo secrets;
-    // the workflow runs `aws ssm put-parameter --overwrite` before every CDK deploy.
+    // Synced automatically from GitHub repository secrets by the deploy
+    // workflow ("Sync secrets to SSM" step in .github/workflows/deploy.yml).
+    // Set ANTHROPIC_API_KEY and ALPHA_ACCESS_KEY as GitHub repo secrets.
     const anthropicKey = ssm.StringParameter.valueForStringParameter(
       this,
       '/lifesim/anthropic-api-key',
@@ -68,7 +47,9 @@ export class LifeSimStack extends cdk.Stack {
     );
 
     // ── App Runner Service ──────────────────────────────────────────────────
-    // 0.25 vCPU / 0.5 GB — the minimum. Scales to 0 when idle.
+    // 0.25 vCPU / 0.5 GB — minimum tier. CloudFront routes /life-game* here.
+    // CloudFront is managed separately (existing distribution d3i0pffdhsjjxt);
+    // see one-time setup instructions in infrastructure/README.md.
     const appRunnerService = new apprunner.CfnService(this, 'LifeSimService', {
       serviceName: 'lifesim',
       sourceConfiguration: {
@@ -82,7 +63,7 @@ export class LifeSimStack extends cdk.Stack {
             runtimeEnvironmentVariables: [
               { name: 'NODE_ENV', value: 'production' },
               { name: 'NEXT_TELEMETRY_DISABLED', value: '1' },
-              { name: 'ANTHROPIC_KEY', value: anthropicKey },
+              { name: 'ANTHROPIC_API_KEY', value: anthropicKey },
               { name: 'ALPHA_ACCESS_KEY', value: alphaKey },
               { name: 'ANTHROPIC_MODEL', value: 'claude-sonnet-4-20250514' },
             ],
@@ -95,7 +76,7 @@ export class LifeSimStack extends cdk.Stack {
       },
       healthCheckConfiguration: {
         protocol: 'HTTP',
-        path: '/life-game', // basePath root → returns 200 once server is up
+        path: '/life-game',
         interval: 10,
         timeout: 5,
         healthyThreshold: 1,
@@ -103,78 +84,10 @@ export class LifeSimStack extends cdk.Stack {
       },
     });
 
-    // App Runner URL is "https://xxx.region.awsapprunner.com"
-    // CloudFront needs the hostname only (no scheme)
-    const appRunnerHost = cdk.Fn.select(
-      1,
-      cdk.Fn.split('https://', appRunnerService.attrServiceUrl),
-    );
-
-    // ── ACM Certificate (must be in us-east-1) ──────────────────────────────
-    const certificate = acm.Certificate.fromCertificateArn(
-      this,
-      'Certificate',
-      props.certificateArn,
-    );
-
-    // ── CloudFront Distribution ─────────────────────────────────────────────
-    const distribution = new cloudfront.Distribution(this, 'Distribution', {
-      domainNames: ['bogdan-vaduva.com'],
-      certificate,
-      comment: 'bogdan-vaduva.com — root app + LifeSim at /life-game',
-      httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
-      minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
-      priceClass: cloudfront.PriceClass.PRICE_CLASS_100, // US + EU only → cheapest
-
-      // ── Default behaviour: existing root app ───────────────────────────
-      defaultBehavior: {
-        origin: new origins.HttpOrigin(props.existingOriginDomain, {
-          protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
-        }),
-        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
-        cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
-        originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
-      },
-
-      // ── /life-game* behaviour: LifeSim on App Runner ───────────────────
-      additionalBehaviors: {
-        '/life-game*': {
-          origin: new origins.HttpOrigin(appRunnerHost, {
-            protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
-          }),
-          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
-          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
-          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
-        },
-      },
-    });
-
-    // ── Route53 ─────────────────────────────────────────────────────────────
-    const hostedZone = route53.HostedZone.fromLookup(this, 'HostedZone', {
-      domainName: 'bogdan-vaduva.com',
-    });
-
-    new route53.ARecord(this, 'ARecord', {
-      zone: hostedZone,
-      recordName: 'bogdan-vaduva.com',
-      target: route53.RecordTarget.fromAlias(new cfTargets.CloudFrontTarget(distribution)),
-    });
-
-    new route53.AaaaRecord(this, 'AaaaRecord', {
-      zone: hostedZone,
-      recordName: 'bogdan-vaduva.com',
-      target: route53.RecordTarget.fromAlias(new cfTargets.CloudFrontTarget(distribution)),
-    });
-
     // ── Outputs ──────────────────────────────────────────────────────────────
     new cdk.CfnOutput(this, 'AppRunnerUrl', {
       value: appRunnerService.attrServiceUrl,
-      description: 'Direct App Runner URL (bypass CloudFront for debugging)',
-    });
-    new cdk.CfnOutput(this, 'CloudFrontDomain', {
-      value: distribution.distributionDomainName,
+      description: 'App Runner service URL — add this as a CloudFront origin for /life-game*',
     });
     new cdk.CfnOutput(this, 'ECRRepository', {
       value: repo.repositoryUri,
