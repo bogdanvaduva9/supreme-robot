@@ -20,11 +20,13 @@ jobs:
         uses: actions/checkout@v4
 
       # ── AWS credentials ──────────────────────────────────────────────────────
-      # Required GitHub secrets:
+      # Required GitHub secrets (repo → Settings → Secrets → Actions):
       #   AWS_ACCESS_KEY_ID      — IAM user access key
       #   AWS_SECRET_ACCESS_KEY  — IAM user secret
       #   AWS_REGION             — eu-central-1
       #   AWS_ACCOUNT_ID         — 12-digit account number
+      #   ANTHROPIC_API_KEY      — sk-ant-... (synced to SSM before CDK deploy)
+      #   ALPHA_ACCESS_KEY       — secret key users type at the /access gate
       #
       # Note: CloudFront is global and its ACM cert must be in us-east-1.
       # Everything else (App Runner, ECR, SSM) runs in eu-central-1.
@@ -54,6 +56,27 @@ jobs:
           docker push $REGISTRY/lifesim:$IMAGE_TAG
           docker push $REGISTRY/lifesim:latest
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+
+      # ── Sync secrets to SSM Parameter Store ─────────────────────────────────
+      # GitHub secrets become SSM SecureString params in eu-central-1.
+      # Required GitHub secrets:
+      #   ANTHROPIC_API_KEY  — sk-ant-... Claude API key
+      #   ALPHA_ACCESS_KEY   — secret key users type at the /access gate
+      # The CDK stack reads these from SSM at deploy time.
+      - name: Sync secrets to SSM
+        run: |
+          aws ssm put-parameter \
+            --region eu-central-1 \
+            --name /lifesim/anthropic-api-key \
+            --value "${{ secrets.ANTHROPIC_API_KEY }}" \
+            --type SecureString \
+            --overwrite
+          aws ssm put-parameter \
+            --region eu-central-1 \
+            --name /lifesim/alpha-access-key \
+            --value "${{ secrets.ALPHA_ACCESS_KEY }}" \
+            --type SecureString \
+            --overwrite
 
       # ── Install CDK dependencies ─────────────────────────────────────────────
       - name: Install infrastructure dependencies

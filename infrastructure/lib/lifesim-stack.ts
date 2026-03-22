@@ -55,9 +55,10 @@ export class LifeSimStack extends cdk.Stack {
     });
 
     // ── Secrets from SSM Parameter Store ───────────────────────────────────
-    // Create these manually before first deploy:
-    //   aws ssm put-parameter --name /lifesim/anthropic-api-key --type SecureString --value "sk-ant-..."
-    //   aws ssm put-parameter --name /lifesim/alpha-access-key  --type SecureString --value "your-key"
+    // These are synced automatically from GitHub repository secrets by the
+    // deploy workflow (see .github/workflows/deploy.yml → "Sync secrets to SSM").
+    // Set ANTHROPIC_API_KEY and ALPHA_ACCESS_KEY in GitHub repo secrets;
+    // the workflow runs `aws ssm put-parameter --overwrite` before every CDK deploy.
     const anthropicKey = ssm.StringParameter.valueForStringParameter(
       this,
       '/lifesim/anthropic-api-key',

@@ -8,12 +8,12 @@
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
     "@aws-cdk/core:stackRelativeExports": true,
 
-    "---REQUIRED BEFORE FIRST DEPLOY---": "Fill in the two values below. Bootstrap with: cdk bootstrap aws://ACCOUNT/eu-central-1",
-    "---SSM SECRETS (eu-central-1)---": "aws ssm put-parameter --region eu-central-1 --name /lifesim/anthropic-api-key --type SecureString --value sk-ant-... && aws ssm put-parameter --region eu-central-1 --name /lifesim/alpha-access-key --type SecureString --value your-key",
-    "---ACM CERT NOTE---": "certificateArn must point to a certificate in us-east-1 (CloudFront requirement), even though everything else is in eu-central-1",
+    "---REQUIRED BEFORE FIRST DEPLOY---": "Set existingOriginDomain below. Bootstrap with: cdk bootstrap aws://ACCOUNT/eu-central-1",
+    "---SSM SECRETS---": "Managed automatically by GitHub Actions deploy workflow — set ANTHROPIC_API_KEY and ALPHA_ACCESS_KEY as GitHub repository secrets",
+    "---ACM CERT NOTE---": "certificateArn points to a us-east-1 certificate (CloudFront requirement), even though everything else is in eu-central-1",
 
     "existingOriginDomain": "REPLACE_WITH_YOUR_EXISTING_APP_ORIGIN",
-    "certificateArn": "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERT_ID",
+    "certificateArn": "arn:aws:acm:us-east-1:916406125528:certificate/c9f4a76e-f1e2-4a2d-a0ab-ac53fe4e3bcf",
     "imageTag": "latest"
   }
 }
