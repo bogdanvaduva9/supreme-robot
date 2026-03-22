@@ -37,6 +37,35 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      # ── Ensure ECR repository exists ─────────────────────────────────────────
+      # Created here (not by CDK) so the repo exists before the first image push.
+      # Idempotent: silently succeeds if the repo already exists.
+      # CDK imports this repo by name rather than creating it.
+      - name: Ensure ECR repository exists
+        run: |
+          aws ecr create-repository \
+            --repository-name lifesim \
+            --region eu-central-1 \
+            --image-scanning-configuration scanOnPush=true \
+            2>/dev/null || echo "ECR repository already exists"
+
+          # Keep only the last 10 images (lifecycle policy is idempotent)
+          aws ecr put-lifecycle-policy \
+            --repository-name lifesim \
+            --region eu-central-1 \
+            --lifecycle-policy-text '{
+              "rules": [{
+                "rulePriority": 1,
+                "description": "Keep last 10 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": { "type": "expire" }
+              }]
+            }'
+
       # ── Login to ECR ─────────────────────────────────────────────────────────
       - name: Login to Amazon ECR
         id: login-ecr
@@ -55,14 +84,10 @@ jobs:
             .
           docker push $REGISTRY/lifesim:$IMAGE_TAG
           docker push $REGISTRY/lifesim:latest
-          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
 
       # ── Sync secrets to SSM Parameter Store ─────────────────────────────────
       # GitHub secrets become SSM SecureString params in eu-central-1.
-      # Required GitHub secrets:
-      #   ANTHROPIC_API_KEY  — sk-ant-... Claude API key
-      #   ALPHA_ACCESS_KEY   — secret key users type at the /access gate
-      # The CDK stack reads these from SSM at deploy time.
+      # The CDK stack reads these from SSM and injects them into App Runner.
       - name: Sync secrets to SSM
         run: |
           aws ssm put-parameter \

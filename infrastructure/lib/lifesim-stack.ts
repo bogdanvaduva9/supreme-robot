@@ -37,12 +37,11 @@ export class LifeSimStack extends cdk.Stack {
     super(scope, id, props);
 
     // ── ECR Repository ──────────────────────────────────────────────────────
-    const repo = new ecr.Repository(this, 'LifeSimRepo', {
-      repositoryName: 'lifesim',
-      // Keep only the last 10 images to avoid ECR storage costs
-      lifecycleRules: [{ maxImageCount: 10, description: 'Keep last 10 images' }],
-      removalPolicy: cdk.RemovalPolicy.RETAIN, // Don't delete on stack destroy
-    });
+    // The repo is created by the GitHub Actions workflow before the first image
+    // push (see "Ensure ECR repository exists" step in deploy.yml).
+    // We import it here by name so CDK never tries to create it — avoiding the
+    // chicken-and-egg problem where the push happens before `cdk deploy`.
+    const repo = ecr.Repository.fromRepositoryName(this, 'LifeSimRepo', 'lifesim');
 
     // ── IAM role: App Runner → ECR ──────────────────────────────────────────
     const accessRole = new iam.Role(this, 'AppRunnerAccessRole', {
